@@ -45,7 +45,7 @@ class UnifiedGeneratorLP:
                 "presence_penalty": ("FLOAT", {"default": 0.0, "step": 0.01}),
                 "repeat_penalty": ("FLOAT", {"default": 1.1, "step": 0.01}),
                 "seed": ("INT", {"default": 42, "step": 1}),
-                "unload": ("BOOLEAN", {"default": False}),
+                "unload": ([True], {"default": "True", "tooltip": "Currently, unload is always true."}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "system_msg": ("STRING", {"multiline": True, "default": "You are a helpful assistant."}),
             },
@@ -107,28 +107,30 @@ class UnifiedGeneratorLP:
             # 여기를 수정했습니다. "chatml" 대신 None을 사용합니다.
             chat_handler = None
 
-        self.llm = Llama(model_path=ckpt_path, chat_handler=chat_handler, offload_kqv=True, f16_kv=True,
-                         use_mlock=False, embedding=False, n_batch=1024, last_n_tokens_size=1024,
-                         verbose=True, seed=seed, n_ctx=max_ctx, n_gpu_layers=gpu_layers, n_threads=n_threads,
-                         logits_all=True, echo=False)
+        try:
+            self.llm = Llama(model_path=ckpt_path, chat_handler=chat_handler, offload_kqv=True, f16_kv=True,
+                             use_mlock=False, embedding=False, n_batch=1024, last_n_tokens_size=1024,
+                             verbose=True, seed=seed, n_ctx=max_ctx, n_gpu_layers=gpu_layers, n_threads=n_threads,
+                             logits_all=True, echo=False)
 
-        response = self.llm.create_chat_completion(
-            messages=messages, max_tokens=max_tokens, temperature=temperature, top_p=top_p,
-            top_k=top_k, frequency_penalty=frequency_penalty, presence_penalty=presence_penalty,
-            repeat_penalty=repeat_penalty, seed=seed,
-        )
+            response = self.llm.create_chat_completion(
+                messages=messages, max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+                top_k=top_k, frequency_penalty=frequency_penalty, presence_penalty=presence_penalty,
+                repeat_penalty=repeat_penalty, seed=seed,
+            )
         
-        if unload:
-            if self.llm is not None:
-                self.llm.close()
-                del self.llm; self.llm = None
-            if self.clip is not None:
-                if hasattr(self.clip, '_exit_stack') and self.clip._exit_stack:
-                    self.clip._exit_stack.close()
-                del self.clip; self.clip = None
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+        finally:
+            if unload:
+                if self.llm is not None:
+                    self.llm.close()
+                    del self.llm; self.llm = None
+                if self.clip is not None:
+                    if hasattr(self.clip, '_exit_stack') and self.clip._exit_stack:
+                        self.clip._exit_stack.close()
+                    del self.clip; self.clip = None
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
         return (f"{response['choices'][0]['message']['content']}", )
 
